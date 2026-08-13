@@ -10,7 +10,9 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "check:gemini": "node scripts/check-gemini.mjs"
+    "check:gemini": "node scripts/check-gemini.mjs",
+    "compare:prompts": "node scripts/compare-prompts.mjs",
+    "make:imperfect": "node scripts/make-imperfect.mjs"
   },
   "dependencies": {}
 }

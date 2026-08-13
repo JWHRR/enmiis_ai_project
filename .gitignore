@@ -6,3 +6,5 @@ node_modules/
 Thumbs.db
 tmp/
 check-output.*
+comparisons/
+test-inputs/
