@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" width="800" height="1000" role="presentation">
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#efeae1" />
+      <stop offset="0.55" stop-color="#e6dfd3" />
+      <stop offset="1" stop-color="#d9d0c1" />
+    </linearGradient>
+
+    <linearGradient id="fold" x1="0" y1="0" x2="1" y2="0.2">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.55" />
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.05" />
+      <stop offset="1" stop-color="#8d8271" stop-opacity="0.22" />
+    </linearGradient>
+
+    <linearGradient id="shade" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#5c5344" stop-opacity="0.52" />
+      <stop offset="0.6" stop-color="#6f6555" stop-opacity="0.22" />
+      <stop offset="1" stop-color="#6f6555" stop-opacity="0.04" />
+    </linearGradient>
+
+    <radialGradient id="glow" cx="0.34" cy="0.24" r="0.72">
+      <stop offset="0" stop-color="#fffdf8" stop-opacity="0.85" />
+      <stop offset="1" stop-color="#fffdf8" stop-opacity="0" />
+    </radialGradient>
+
+    <filter id="soften" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="9" />
+    </filter>
+  </defs>
+
+  <rect width="800" height="1000" fill="url(#ground)" />
+  <rect width="800" height="1000" fill="url(#glow)" />
+
+  <!-- draped fabric: long sweeping folds -->
+  <g filter="url(#soften)" opacity="0.9">
+    <path d="M120 -40 C 250 220, 60 430, 190 690 C 250 810, 210 930, 150 1040 L -60 1040 L -60 -40 Z"
+          fill="url(#shade)" />
+    <path d="M330 -40 C 420 240, 250 470, 360 720 C 420 860, 380 960, 330 1040 L 120 1040 C 200 900, 240 780, 190 640 C 120 430, 280 230, 190 -40 Z"
+          fill="url(#fold)" />
+    <path d="M560 -40 C 640 260, 470 500, 580 760 C 640 900, 600 980, 560 1040 L 350 1040 C 420 900, 450 800, 390 660 C 300 450, 450 220, 380 -40 Z"
+          fill="url(#shade)" opacity="0.75" />
+    <path d="M800 -40 L 800 1040 L 590 1040 C 650 920, 680 820, 620 690 C 520 470, 690 240, 620 -40 Z"
+          fill="url(#fold)" opacity="0.8" />
+  </g>
+
+  <!-- fine seam lines -->
+  <g stroke="#5f5648" stroke-opacity="0.18" fill="none" stroke-width="1">
+    <path d="M205 -20 C 285 240, 130 460, 255 700 C 315 820, 285 940, 235 1020" />
+    <path d="M430 -20 C 505 250, 340 490, 455 730 C 515 860, 480 960, 440 1020" />
+    <path d="M665 -20 C 730 270, 565 510, 675 760 C 725 880, 700 970, 665 1020" />
+  </g>
+
+  <!-- bronze rule: one restrained accent -->
+  <line x1="72" y1="880" x2="248" y2="880" stroke="#8a6f4b" stroke-width="1" />
+</svg>

@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Atelier — Visualisez votre tenue</title>
+<meta name="description" content="Découvrez votre robe personnalisée portée par vous, avant même de la commander." />
+<meta name="color-scheme" content="light" />
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<a class="skip-link" href="#main">Aller au contenu</a>
+
+<header class="masthead">
+  <a class="masthead__mark" href="#" data-action="home" aria-label="Atelier — accueil">
+    Atelier
+  </a>
+  <p class="masthead__tag">Virtual Outfit Studio</p>
+  <span class="badge badge--demo" id="demoBadge" hidden>Mode démonstration</span>
+</header>
+
+<main id="main">
+
+  <!-- ───────────────────────────── LANDING ───────────────────────────── -->
+  <section class="view view--landing" data-view="landing">
+    <div class="hero">
+      <div class="hero__text">
+        <p class="eyebrow">Robe de cérémonie sur mesure</p>
+        <h1 class="display" tabindex="-1">Visualisez<br />votre tenue.</h1>
+        <p class="lede">
+          Découvrez votre robe personnalisée portée par vous, avant même de la commander.
+        </p>
+        <div class="hero__actions">
+          <button class="btn btn--primary" type="button" data-action="start">Créer ma tenue</button>
+          <p class="muted micro">Propulsé par l'intelligence artificielle.</p>
+        </div>
+      </div>
+
+      <figure class="hero__image">
+        <img src="assets/hero.svg" alt="" role="presentation" />
+      </figure>
+    </div>
+
+    <ol class="process">
+      <li>
+        <span class="process__num">01</span>
+        <span class="process__label">Votre photo</span>
+      </li>
+      <li>
+        <span class="process__num">02</span>
+        <span class="process__label">Les trois pièces</span>
+      </li>
+      <li>
+        <span class="process__num">03</span>
+        <span class="process__label">Votre rendu</span>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ───────────────────────────── STUDIO ───────────────────────────── -->
+  <section class="view view--studio" data-view="studio" hidden>
+
+    <nav class="stepper" aria-label="Progression">
+      <ol>
+        <li data-step="1"><span class="stepper__dot"></span><span class="stepper__name">Photo</span></li>
+        <li data-step="2"><span class="stepper__dot"></span><span class="stepper__name">Pièce 1</span></li>
+        <li data-step="3"><span class="stepper__dot"></span><span class="stepper__name">Pièce 2</span></li>
+        <li data-step="4"><span class="stepper__dot"></span><span class="stepper__name">Pièce 3</span></li>
+        <li data-step="5"><span class="stepper__dot"></span><span class="stepper__name">Sélection</span></li>
+      </ol>
+    </nav>
+
+    <!-- Step 1 — person -->
+    <article class="panel" data-panel="1">
+      <header class="panel__head">
+        <p class="eyebrow">Étape 1 sur 4</p>
+        <h2 class="title" tabindex="-1">1. Votre photo</h2>
+        <p class="lede lede--sm">Ajoutez une photo claire de la personne qui portera la tenue.</p>
+      </header>
+
+      <div class="panel__body">
+        <div class="uploader" data-field="person" data-ratio="4/5">
+          <input class="uploader__input" type="file" id="file-person"
+                 accept="image/jpeg,image/png,image/webp" />
+          <label class="uploader__zone" for="file-person">
+            <span class="uploader__plus" aria-hidden="true">+</span>
+            <span class="uploader__cta">Ajouter votre photo</span>
+            <span class="uploader__formats">JPG · JPEG · PNG · WEBP</span>
+          </label>
+          <figure class="uploader__preview" hidden>
+            <img alt="Aperçu de la photo importée" />
+            <figcaption class="uploader__tools">
+              <button class="link" type="button" data-action="replace">Remplacer</button>
+              <button class="link" type="button" data-action="remove">Retirer</button>
+            </figcaption>
+          </figure>
+        </div>
+
+        <aside class="advice">
+          <h3 class="advice__title">Conseils</h3>
+          <p>
+            Pour un résultat optimal, utilisez une photo nette, bien éclairée, avec le visage
+            clairement visible et idéalement le haut du corps ou le corps entier.
+          </p>
+          <p class="feedback" data-feedback="person" role="status" aria-live="polite"></p>
+        </aside>
+      </div>
+
+      <footer class="panel__nav">
+        <button class="btn btn--ghost" type="button" data-action="back">Retour</button>
+        <button class="btn btn--primary" type="button" data-action="next">Continuer</button>
+      </footer>
+    </article>
+
+    <!-- Step 2 — piece 1 -->
+    <article class="panel" data-panel="2" hidden>
+      <header class="panel__head">
+        <p class="eyebrow">Étape 2 sur 4</p>
+        <h2 class="title" tabindex="-1">2. Pièce 1 — Robe</h2>
+        <p class="lede lede--sm">
+          Ajoutez l'image du premier élément de la robe. Elle sera reproduite telle quelle.
+        </p>
+      </header>
+
+      <div class="panel__body">
+        <div class="uploader" data-field="piece1" data-ratio="1/1">
+          <input class="uploader__input" type="file" id="file-piece1"
+                 accept="image/jpeg,image/png,image/webp" />
+          <label class="uploader__zone" for="file-piece1">
+            <span class="uploader__plus" aria-hidden="true">+</span>
+            <span class="uploader__cta">Ajouter la pièce 1</span>
+            <span class="uploader__formats">JPG · JPEG · PNG · WEBP</span>
+          </label>
+          <figure class="uploader__preview" hidden>
+            <img alt="Aperçu de la pièce 1" />
+            <figcaption class="uploader__tools">
+              <button class="link" type="button" data-action="replace">Remplacer</button>
+              <button class="link" type="button" data-action="remove">Retirer</button>
+            </figcaption>
+          </figure>
+        </div>
+
+        <aside class="advice">
+          <h3 class="advice__title">Référence exacte</h3>
+          <p>
+            Cette image sert de référence produit. La couleur, la matière, la coupe et les
+            finitions sont conservées à l'identique.
+          </p>
+          <p class="feedback" data-feedback="piece1" role="status" aria-live="polite"></p>
+        </aside>
+      </div>
+
+      <footer class="panel__nav">
+        <button class="btn btn--ghost" type="button" data-action="back">Retour</button>
+        <button class="btn btn--primary" type="button" data-action="next">Continuer</button>
+      </footer>
+    </article>
+
+    <!-- Step 3 — piece 2 -->
+    <article class="panel" data-panel="3" hidden>
+      <header class="panel__head">
+        <p class="eyebrow">Étape 3 sur 4</p>
+        <h2 class="title" tabindex="-1">3. Pièce 2 — Détails / manches</h2>
+        <p class="lede lede--sm">
+          Ajoutez l'image du deuxième élément. Les détails seront respectés à l'identique.
+        </p>
+      </header>
+
+      <div class="panel__body">
+        <div class="uploader" data-field="piece2" data-ratio="1/1">
+          <input class="uploader__input" type="file" id="file-piece2"
+                 accept="image/jpeg,image/png,image/webp" />
+          <label class="uploader__zone" for="file-piece2">
+            <span class="uploader__plus" aria-hidden="true">+</span>
+            <span class="uploader__cta">Ajouter la pièce 2</span>
+            <span class="uploader__formats">JPG · JPEG · PNG · WEBP</span>
+          </label>
+          <figure class="uploader__preview" hidden>
+            <img alt="Aperçu de la pièce 2" />
+            <figcaption class="uploader__tools">
+              <button class="link" type="button" data-action="replace">Remplacer</button>
+              <button class="link" type="button" data-action="remove">Retirer</button>
+            </figcaption>
+          </figure>
+        </div>
+
+        <aside class="advice">
+          <h3 class="advice__title">Conservé à l'identique</h3>
+          <ul class="advice__list">
+            <li>Couleur et tissu</li>
+            <li>Texture et coutures</li>
+            <li>Forme et motifs</li>
+            <li>Éléments décoratifs</li>
+            <li>Broderies et logos</li>
+          </ul>
+          <p class="feedback" data-feedback="piece2" role="status" aria-live="polite"></p>
+        </aside>
+      </div>
+
+      <footer class="panel__nav">
+        <button class="btn btn--ghost" type="button" data-action="back">Retour</button>
+        <button class="btn btn--primary" type="button" data-action="next">Continuer</button>
+      </footer>
+    </article>
+
+    <!-- Step 4 — piece 3 -->
+    <article class="panel" data-panel="4" hidden>
+      <header class="panel__head">
+        <p class="eyebrow">Étape 4 sur 4</p>
+        <h2 class="title" tabindex="-1">4. Pièce 3 — Accessoire / finition</h2>
+        <p class="lede lede--sm">
+          Ajoutez l'image du dernier élément de la tenue.
+        </p>
+      </header>
+
+      <div class="panel__body">
+        <div class="uploader" data-field="piece3" data-ratio="1/1">
+          <input class="uploader__input" type="file" id="file-piece3"
+                 accept="image/jpeg,image/png,image/webp" />
+          <label class="uploader__zone" for="file-piece3">
+            <span class="uploader__plus" aria-hidden="true">+</span>
+            <span class="uploader__cta">Ajouter la pièce 3</span>
+            <span class="uploader__formats">JPG · JPEG · PNG · WEBP</span>
+          </label>
+          <figure class="uploader__preview" hidden>
+            <img alt="Aperçu de la pièce 3" />
+            <figcaption class="uploader__tools">
+              <button class="link" type="button" data-action="replace">Remplacer</button>
+              <button class="link" type="button" data-action="remove">Retirer</button>
+            </figcaption>
+          </figure>
+        </div>
+
+        <aside class="advice">
+          <h3 class="advice__title">Une seule tenue</h3>
+          <p>
+            Les trois images sont comprises comme les composants d'une même tenue de cérémonie,
+            et non comme trois vêtements distincts.
+          </p>
+          <p class="feedback" data-feedback="piece3" role="status" aria-live="polite"></p>
+        </aside>
+      </div>
+
+      <footer class="panel__nav">
+        <button class="btn btn--ghost" type="button" data-action="back">Retour</button>
+        <button class="btn btn--primary" type="button" data-action="next">Continuer</button>
+      </footer>
+    </article>
+
+    <!-- Step 5 — review -->
+    <article class="panel panel--review" data-panel="5" hidden>
+      <header class="panel__head">
+        <p class="eyebrow">Récapitulatif</p>
+        <h2 class="title" tabindex="-1">Votre sélection</h2>
+        <p class="lede lede--sm">Vérifiez vos références avant la génération.</p>
+      </header>
+
+      <div class="review" id="review"></div>
+
+      <div class="review__cta">
+        <button class="btn btn--primary btn--lg" type="button" data-action="generate">
+          Générer ma tenue
+        </button>
+        <p class="micro muted" id="reviewNote"></p>
+      </div>
+
+      <footer class="panel__nav">
+        <button class="btn btn--ghost" type="button" data-action="back">Retour</button>
+      </footer>
+    </article>
+  </section>
+
+  <!-- ───────────────────────────── LOADING ───────────────────────────── -->
+  <section class="view view--loading" data-view="loading" hidden>
+    <div class="loading">
+      <div class="loading__mark" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </div>
+      <h2 class="title" tabindex="-1">Nous préparons votre tenue…</h2>
+      <p class="loading__status" id="loadingStatus" role="status" aria-live="polite">
+        Analyse de votre photo…
+      </p>
+      <div class="loading__bar" aria-hidden="true"><i></i></div>
+      <button class="link loading__cancel" type="button" data-action="cancel">Annuler</button>
+    </div>
+  </section>
+
+  <!-- ───────────────────────────── RESULT ───────────────────────────── -->
+  <section class="view view--result" data-view="result" hidden>
+    <header class="result__head">
+      <h1 class="display display--sm" tabindex="-1">Votre tenue.</h1>
+      <p class="lede">Voici votre look personnalisé.</p>
+    </header>
+
+    <div class="compare" id="compare">
+      <div class="compare__switch" role="tablist" aria-label="Comparaison">
+        <button class="compare__tab" type="button" role="tab" data-compare="after" aria-selected="true">
+          Votre tenue
+        </button>
+        <button class="compare__tab" type="button" role="tab" data-compare="before" aria-selected="false">
+          Photo originale
+        </button>
+      </div>
+
+      <figure class="stage">
+        <img id="resultImage" class="stage__img is-visible" alt="Votre tenue générée" />
+        <img id="beforeImage" class="stage__img" alt="Votre photo originale" />
+      </figure>
+
+      <p class="micro muted stage__note" id="resultNote"></p>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn--primary" type="button" data-action="regenerate">Générer à nouveau</button>
+      <button class="btn btn--ghost" type="button" data-action="edit">Modifier mes références</button>
+      <button class="btn btn--ghost" type="button" data-action="download">Télécharger le résultat</button>
+      <button class="btn btn--quiet" type="button" data-action="restart">Recommencer</button>
+    </div>
+  </section>
+
+  <!-- ───────────────────────────── ERROR ───────────────────────────── -->
+  <section class="view view--error" data-view="error" hidden>
+    <div class="failure">
+      <h2 class="title" tabindex="-1">Nous n'avons pas pu générer votre tenue.</h2>
+      <p class="lede lede--sm">
+        Essayez avec une photo plus nette ou des images de référence plus claires.
+      </p>
+      <p class="failure__detail" id="errorDetail"></p>
+      <div class="actions actions--center">
+        <button class="btn btn--primary" type="button" data-action="regenerate">Réessayer</button>
+        <button class="btn btn--ghost" type="button" data-action="edit">Modifier mes images</button>
+      </div>
+      <p class="micro muted">Vos images sont conservées, rien n'a été supprimé.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="colophon">
+  <p>Vos images sont utilisées uniquement pour générer votre visualisation.</p>
+  <p class="colophon__note" id="privacyNote"></p>
+</footer>
+
+<script src="app.js" type="module"></script>
+</body>
+</html>

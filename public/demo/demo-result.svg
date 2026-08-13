@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1200" width="900" height="1200"
+     role="img" aria-label="Exemple de démonstration : illustration d'une tenue de cérémonie. Ceci n'est pas un rendu généré à partir de vos images.">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.2" y2="1">
+      <stop offset="0" stop-color="#f7f4ee" />
+      <stop offset="1" stop-color="#e7e1d6" />
+    </linearGradient>
+
+    <linearGradient id="robe" x1="0.15" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#2c3550" />
+      <stop offset="0.45" stop-color="#1d2439" />
+      <stop offset="1" stop-color="#141a2b" />
+    </linearGradient>
+
+    <linearGradient id="sleeve" x1="0" y1="0" x2="1" y2="0.6">
+      <stop offset="0" stop-color="#39435f" />
+      <stop offset="1" stop-color="#1b2134" />
+    </linearGradient>
+
+    <linearGradient id="stole" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#a9834f" />
+      <stop offset="1" stop-color="#7d5f38" />
+    </linearGradient>
+
+    <radialGradient id="vignette" cx="0.5" cy="0.38" r="0.75">
+      <stop offset="0.55" stop-color="#000000" stop-opacity="0" />
+      <stop offset="1" stop-color="#4a4234" stop-opacity="0.16" />
+    </radialGradient>
+  </defs>
+
+  <rect width="900" height="1200" fill="url(#bg)" />
+
+  <!-- floor shadow -->
+  <ellipse cx="450" cy="1085" rx="215" ry="26" fill="#6f6555" opacity="0.16" />
+
+  <g>
+    <!-- cap -->
+    <path d="M450 214 L586 262 L450 310 L314 262 Z" fill="#1d2439" />
+    <path d="M414 286 L486 286 L486 312 Q450 328 414 312 Z" fill="#161c2d" />
+    <line x1="586" y1="262" x2="612" y2="366" stroke="#a9834f" stroke-width="4" stroke-linecap="round" />
+    <circle cx="586" cy="262" r="7" fill="#a9834f" />
+    <circle cx="612" cy="372" r="11" fill="#a9834f" />
+
+    <!-- head and neck -->
+    <path d="M450 300 q-52 0 -52 62 q0 60 52 60 q52 0 52 -60 q0 -62 -52 -62 Z" fill="#cbb49c" />
+    <rect x="424" y="404" width="52" height="46" rx="14" fill="#bda58c" />
+
+    <!-- robe body -->
+    <path d="M450 440
+             C 356 448, 300 500, 282 596
+             C 262 706, 250 860, 238 1044
+             L 662 1044
+             C 650 860, 638 706, 618 596
+             C 600 500, 544 448, 450 440 Z"
+          fill="url(#robe)" />
+
+    <!-- sleeves -->
+    <path d="M300 520 C 246 580, 224 700, 236 806 C 268 802, 300 792, 322 776 C 306 690, 306 600, 330 536 Z"
+          fill="url(#sleeve)" />
+    <path d="M600 520 C 654 580, 676 700, 664 806 C 632 802, 600 792, 578 776 C 594 690, 594 600, 570 536 Z"
+          fill="url(#sleeve)" />
+
+    <!-- fold lines -->
+    <g stroke="#0d1220" stroke-opacity="0.5" fill="none" stroke-width="2">
+      <path d="M372 520 C 356 690, 348 870, 342 1044" />
+      <path d="M528 520 C 544 690, 552 870, 558 1044" />
+      <path d="M450 470 L 450 1044" stroke-opacity="0.35" />
+      <path d="M300 640 C 292 760, 288 900, 284 1044" stroke-opacity="0.3" />
+      <path d="M600 640 C 608 760, 612 900, 616 1044" stroke-opacity="0.3" />
+    </g>
+
+    <!-- stole / finishing piece -->
+    <path d="M406 446 C 386 560, 378 760, 374 940 L 418 940 C 420 760, 424 566, 438 452 Z" fill="url(#stole)" />
+    <path d="M494 446 C 514 560, 522 760, 526 940 L 482 940 C 480 760, 476 566, 462 452 Z" fill="url(#stole)" />
+
+    <!-- collar -->
+    <path d="M450 440 L 412 452 L 450 512 L 488 452 Z" fill="#111726" />
+  </g>
+
+  <rect width="900" height="1200" fill="url(#vignette)" />
+
+  <!-- explicit demonstration label -->
+  <g font-family="Georgia, 'Times New Roman', serif">
+    <rect x="60" y="60" width="330" height="46" fill="#f7f4ee" stroke="#8a6f4b" />
+    <text x="82" y="90" font-size="19" letter-spacing="4" fill="#8a6f4b">MODE DÉMONSTRATION</text>
+
+    <text x="60" y="1136" font-size="21" fill="#55524a">
+      Exemple prédéfini — illustration.
+    </text>
+    <text x="60" y="1168" font-size="19" fill="#8b857a">
+      Cette image n'a pas été générée à partir de vos photos.
+    </text>
+  </g>
+</svg>

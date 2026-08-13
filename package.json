@@ -1,0 +1,15 @@
+{
+  "name": "atelier-virtual-outfit-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI Virtual Outfit Studio — photorealistic visualization of a person wearing a custom graduation robe.",
+  "type": "module",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {}
+}
