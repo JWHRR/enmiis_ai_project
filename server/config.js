@@ -36,8 +36,20 @@ function loadDotEnv() {
 
 loadDotEnv();
 
+const env = (name) => (process.env[name] || '').trim();
+
+/** Credential env vars accepted for each provider, in priority order. */
+const PROVIDER_KEYS = {
+  gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_AI_STUDIO_API_KEY'],
+  fal: ['FAL_KEY', 'FAL_API_KEY'],
+  replicate: ['REPLICATE_API_TOKEN', 'REPLICATE_API_KEY'],
+  fashn: ['FASHN_API_KEY'],
+  openai: ['OPENAI_API_KEY'],
+  demo: [],
+};
+
 const DEFAULT_MODELS = {
-  gemini: 'gemini-2.5-flash-image',
+  gemini: 'gemini-3.1-flash-image',
   fal: 'fal-ai/nano-banana/edit',
   replicate: 'google/nano-banana',
   fashn: 'tryon-v1.6',
@@ -45,61 +57,141 @@ const DEFAULT_MODELS = {
   demo: 'demo',
 };
 
-const requestedProvider = (process.env.AI_PROVIDER || '').trim().toLowerCase();
-const apiKey = (process.env.AI_API_KEY || '').trim();
-
 /**
- * The provider actually used. Anything that is not configured with a key
- * silently falls back to demo mode so the product is always demonstrable —
- * but the frontend is told, explicitly, that it is looking at a demo.
+ * Gemini image models in preference order — Nano Banana 2 first, then the
+ * Pro tier, then the previous Nano Banana. The adapter walks this list when a
+ * model is unavailable to the caller's key, so a project that has not been
+ * granted the newest model still generates.
  */
-function resolveProvider() {
-  if (!requestedProvider || requestedProvider === 'demo') return 'demo';
-  if (!(requestedProvider in DEFAULT_MODELS)) return 'demo';
-  if (!apiKey) return 'demo';
-  return requestedProvider;
+const GEMINI_MODEL_LADDER = [
+  'gemini-3.1-flash-image',
+  'gemini-3-pro-image',
+  'gemini-2.5-flash-image',
+  'gemini-3.1-flash-lite-image',
+];
+
+const KNOWN_PROVIDERS = Object.keys(PROVIDER_KEYS);
+
+const primaryProvider = (env('AI_PROVIDER') || 'gemini').toLowerCase();
+
+/** The generic key applies to the primary provider only, as a convenience. */
+const genericKey = env('AI_API_KEY');
+
+function credentialFor(name) {
+  for (const variable of PROVIDER_KEYS[name] || []) {
+    const value = env(variable);
+    if (value) return value;
+  }
+  if (name === primaryProvider && genericKey) return genericKey;
+  return '';
 }
 
-const provider = resolveProvider();
+function modelFor(name) {
+  if (name === 'gemini') return env('GEMINI_IMAGE_MODEL') || env('AI_MODEL') || DEFAULT_MODELS.gemini;
+  if (name === primaryProvider && env('AI_MODEL')) return env('AI_MODEL');
+  return DEFAULT_MODELS[name];
+}
+
+const aspectRatio = env('AI_ASPECT_RATIO') || '3:4';
+const timeoutMs = Number(env('AI_TIMEOUT_MS')) || 180000;
+
+/** Per-provider settings handed to the adapters. */
+const providers = Object.fromEntries(
+  KNOWN_PROVIDERS.map((name) => {
+    const apiKey = credentialFor(name);
+    const model = modelFor(name);
+
+    const settings = {
+      name,
+      apiKey,
+      model,
+      configured: name === 'demo' ? true : Boolean(apiKey),
+      aspectRatio,
+      timeoutMs,
+    };
+
+    if (name === 'gemini') {
+      // Configured model first, then the rest of the ladder as fallbacks.
+      settings.models = [model, ...GEMINI_MODEL_LADDER.filter((m) => m !== model)];
+      settings.apiBase = env('GEMINI_API_BASE') || 'https://generativelanguage.googleapis.com/v1beta';
+      settings.imageSize = env('GEMINI_IMAGE_SIZE') || '2K';
+    }
+    if (name === 'replicate') {
+      settings.imagesKey = env('AI_INPUT_IMAGES_KEY') || 'image_input';
+    }
+
+    return [name, settings];
+  })
+);
+
+/**
+ * The ordered list of providers to attempt. An explicit AI_PROVIDER_CHAIN wins;
+ * otherwise the primary provider leads and every other configured provider
+ * follows as an automatic fallback.
+ */
+function buildChain() {
+  const explicit = env('AI_PROVIDER_CHAIN')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+
+  const requested = explicit.length
+    ? explicit
+    : [primaryProvider, ...KNOWN_PROVIDERS.filter((n) => n !== primaryProvider && n !== 'demo')];
+
+  const chain = requested.filter(
+    (name, index) =>
+      KNOWN_PROVIDERS.includes(name) &&
+      providers[name].configured &&
+      requested.indexOf(name) === index
+  );
+
+  // Demo is a last resort: it only runs when nothing real is available.
+  const real = chain.filter((name) => name !== 'demo');
+  return real.length ? real : ['demo'];
+}
+
+const chain = buildChain();
+const isDemo = chain.length === 1 && chain[0] === 'demo';
 
 export const config = {
   rootDir,
   publicDir: path.join(rootDir, 'public'),
-  port: Number(process.env.PORT) || 3000,
+  port: Number(env('PORT')) || 3000,
 
-  provider,
-  requestedProvider: requestedProvider || 'demo',
-  apiKey,
-  model: (process.env.AI_MODEL || '').trim() || DEFAULT_MODELS[provider],
-  replicateImagesKey: (process.env.AI_INPUT_IMAGES_KEY || '').trim() || 'image_input',
-  aspectRatio: (process.env.AI_ASPECT_RATIO || '').trim() || '3:4',
-  timeoutMs: Number(process.env.AI_TIMEOUT_MS) || 240000,
-  debugPrompt: process.env.DEBUG_PROMPT === '1',
+  primaryProvider,
+  providers,
+  chain,
+  isDemo,
 
-  isDemo: provider === 'demo',
-  /** True when a provider was requested but could not be used (missing key / unknown name). */
-  misconfigured:
-    Boolean(requestedProvider) &&
-    requestedProvider !== 'demo' &&
-    provider === 'demo',
+  /** A provider was asked for but has no usable credential. */
+  misconfigured: !isDemo
+    ? false
+    : primaryProvider !== 'demo' && !providers[primaryProvider]?.configured,
 
-  // Upload limits, enforced on both sides of the wire.
+  aspectRatio,
+  timeoutMs,
+  debugPrompt: env('DEBUG_PROMPT') === '1',
+
+  // Technical and security limits only. Image quality is never a reason to
+  // block a generation — the model is expected to cope with imperfect input.
   limits: {
-    maxImageBytes: 15 * 1024 * 1024,
-    maxRequestBytes: 40 * 1024 * 1024,
-    minDimension: 200,
-    recommendedPersonDimension: 640,
-    recommendedPieceDimension: 512,
+    maxImageBytes: 20 * 1024 * 1024,
+    maxRequestBytes: 60 * 1024 * 1024,
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
   },
 };
 
+/** Public, key-free description of the runtime for the frontend. */
 export function describeConfig() {
   return {
-    provider: config.provider,
-    model: config.model,
+    provider: config.chain[0],
+    chain: config.chain,
+    model: config.providers[config.chain[0]]?.model,
     demo: config.isDemo,
     misconfigured: config.misconfigured,
     limits: config.limits,
   };
 }
+
+export { GEMINI_MODEL_LADDER, KNOWN_PROVIDERS };

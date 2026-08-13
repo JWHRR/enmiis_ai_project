@@ -206,21 +206,27 @@ server.headersTimeout = 65000;
 server.keepAliveTimeout = 72000;
 
 server.listen(config.port, () => {
+  const primary = config.providers[config.chain[0]];
+
   const banner = [
     '',
     '  ATELIER — AI Virtual Outfit Studio',
     `  → http://localhost:${config.port}`,
     '',
-    `  Provider : ${config.provider}${config.isDemo ? '  (mode démonstration)' : ''}`,
-    `  Model    : ${config.model}`,
+    `  Chain    : ${config.chain.join(' → ')}${config.isDemo ? '  (mode démonstration)' : ''}`,
+    `  Model    : ${primary?.model}`,
   ];
 
-  if (config.misconfigured) {
+  if (config.chain[0] === 'gemini') {
+    banner.push(`  Fallbacks: ${primary.models.slice(1).join(', ')}`);
+  }
+
+  if (config.isDemo) {
     banner.push(
       '',
-      `  ⚠ AI_PROVIDER="${config.requestedProvider}" could not be used.`,
-      '    Set a valid AI_PROVIDER and AI_API_KEY in .env to enable real generation.',
-      '    Running in demo mode until then.'
+      '  ⚠ No provider credential found — running in demo mode.',
+      '    Set GEMINI_API_KEY in .env to enable real generation.',
+      '    Get a free key at https://aistudio.google.com/apikey'
     );
   }
 

@@ -114,20 +114,25 @@ function imageSize(buf, mimeType) {
   return null;
 }
 
-const LABELS = {
-  person: 'votre photo',
-  piece1: 'la pièce 1',
-  piece2: 'la pièce 2',
-  piece3: 'la pièce 3',
-};
+/** The four reference slots, and the aliases accepted for each. */
+export const REFERENCE_FIELDS = [
+  { slot: 'person', aliases: ['person', 'face'], label: 'votre photo' },
+  { slot: 'gown', aliases: ['gown', 'robe', 'piece1'], label: 'la robe' },
+  { slot: 'hood', aliases: ['hood', 'stole', 'etole', 'piece2'], label: "l'étole" },
+  { slot: 'cap', aliases: ['cap', 'mortarboard', 'toque', 'piece3'], label: 'la toque' },
+];
 
 /**
- * Validates one incoming data URL and returns a normalised reference.
+ * Validates one incoming data URL.
+ *
+ * Only technical and security problems are rejected: unsupported format,
+ * invalid file structure, and excessive size. Image *quality* is never a
+ * reason to refuse — the generation model is expected to cope with blurry,
+ * cropped, low-resolution or badly lit references.
+ *
  * @returns {{ base64: string, mimeType: string, bytes: number, width: number|null, height: number|null }}
  */
-export function validateImage(dataUrl, field) {
-  const label = LABELS[field] || 'cette image';
-
+export function validateImage(dataUrl, field, label = 'cette image') {
   if (typeof dataUrl !== 'string' || !dataUrl) {
     throw new ValidationError(`Il manque ${label}.`, field);
   }
@@ -160,9 +165,13 @@ export function validateImage(dataUrl, field) {
 
   if (buf.length > config.limits.maxImageBytes) {
     const mb = Math.round(config.limits.maxImageBytes / (1024 * 1024));
-    throw new ValidationError(`${capitalise(label)} est trop volumineuse (maximum ${mb} Mo).`, field);
+    throw new ValidationError(
+      `${capitalise(label)} est trop volumineuse (maximum ${mb} Mo).`,
+      field
+    );
   }
 
+  // Structural check: the bytes must really be one of the supported formats.
   const actualMime = sniffType(buf);
   if (!actualMime) {
     throw new ValidationError(
@@ -172,12 +181,6 @@ export function validateImage(dataUrl, field) {
   }
 
   const size = imageSize(buf, actualMime);
-  if (size && (size.width < config.limits.minDimension || size.height < config.limits.minDimension)) {
-    throw new ValidationError(
-      'Cette image est trop petite pour obtenir un résultat optimal.',
-      field
-    );
-  }
 
   return {
     base64: buf.toString('base64'),
@@ -189,17 +192,20 @@ export function validateImage(dataUrl, field) {
 }
 
 /**
- * Validates the whole payload: one person + three outfit pieces.
+ * Validates the whole payload: the person plus the three outfit components.
+ * Accepts the descriptive field names and the older piece1/2/3 aliases.
  */
 export function validateRequest(body) {
   if (!body || typeof body !== 'object') {
-    throw new ValidationError("La requête est invalide. Veuillez recharger la page.", null);
+    throw new ValidationError('La requête est invalide. Veuillez recharger la page.', null);
   }
 
-  const person = validateImage(body.person, 'person');
-  const pieces = ['piece1', 'piece2', 'piece3'].map((field) => validateImage(body[field], field));
+  const resolved = REFERENCE_FIELDS.map(({ slot, aliases, label }) => {
+    const key = aliases.find((alias) => typeof body[alias] === 'string' && body[alias]);
+    return validateImage(key ? body[key] : undefined, slot, label);
+  });
 
-  return { person, pieces };
+  return { person: resolved[0], pieces: resolved.slice(1) };
 }
 
 function capitalise(text) {

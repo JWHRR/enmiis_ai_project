@@ -1,87 +1,99 @@
 /**
  * Internal generation prompt.
  *
- * This text is a backend-only asset: it is never returned by the API and never
- * rendered in the browser. It is built dynamically from the references that
- * were actually uploaded, so the model is told exactly how many garment
- * components belong to the single outfit it must assemble.
+ * Backend-only asset: never returned by the API, never rendered in the browser.
+ * It is built from the references that were actually uploaded and is written
+ * for multi-reference image models, where each image must carry an explicit
+ * role so the model knows which one is the identity and which are products.
  */
 
-const PIECE_ROLES = [
+/** The four reference slots, in the order they are sent to the model. */
+export const REFERENCE_ROLES = [
   {
-    slot: 'piece1',
-    label: 'GARMENT REFERENCE 1 — main robe / gown body',
+    slot: 'person',
+    caption: 'IMAGE 1 = PERSON REFERENCE (identity)',
     detail:
-      'the principal body of the graduation robe: its exact colour, fabric weight, weave, sheen, cut, length, closure and construction',
+      "the person who must appear in the final photograph: their face, facial structure, skin tone, hairstyle, approximate age and overall appearance",
   },
   {
-    slot: 'piece2',
-    label: 'GARMENT REFERENCE 2 — sleeves / detailing',
+    slot: 'gown',
+    caption: 'IMAGE 2 = GOWN / ROBE REFERENCE',
     detail:
-      'sleeve shape and length, collar, facings, trims, stitching, piping, embroidery, patterns, appliqués and any logo exactly as shown',
+      'the graduation gown or robe: its exact colour, fabric, sheen, cut, length, sleeves, collar, facings and construction',
   },
   {
-    slot: 'piece3',
-    label: 'GARMENT REFERENCE 3 — accessory / finishing piece',
+    slot: 'hood',
+    caption: 'IMAGE 3 = HOOD / STOLE REFERENCE',
     detail:
-      'the finishing component (cap, stole, hood, sash, cord or similar): its exact shape, colour, material and the way it is worn',
+      'the hood or stole worn over the gown: its exact colours, lining, trim, shape, embroidery, patterns, insignia and the way it drapes',
+  },
+  {
+    slot: 'cap',
+    caption: 'IMAGE 4 = MORTARBOARD / CAP REFERENCE',
+    detail:
+      'the mortarboard or graduation cap: its exact shape, colour, material, tassel colour and the way it sits on the head',
   },
 ];
 
-/** Human-readable role labels, used to caption each image sent to the model. */
-export function referenceLabels(pieceCount = 3) {
+/** Captions sent alongside each image, so providers can label the references. */
+export function referenceLabels(count = REFERENCE_ROLES.length) {
+  const roles = REFERENCE_ROLES.slice(0, count);
   return {
-    person: 'IDENTITY REFERENCE — the person who must appear in the final photograph',
-    pieces: PIECE_ROLES.slice(0, pieceCount).map((r) => r.label),
+    person: roles[0].caption,
+    pieces: roles.slice(1).map((role) => role.caption),
+    all: roles.map((role) => role.caption),
   };
 }
 
 /**
- * @param {{ pieceCount?: number, aspectRatio?: string }} options
+ * @param {{ referenceCount?: number, aspectRatio?: string }} options
  * @returns {string} the internal prompt sent to the image model
  */
 export function buildGenerationPrompt(options = {}) {
-  const pieceCount = Math.min(Math.max(options.pieceCount ?? 3, 1), 3);
-  const roles = PIECE_ROLES.slice(0, pieceCount);
+  const count = Math.min(Math.max(options.referenceCount ?? 4, 2), REFERENCE_ROLES.length);
+  const roles = REFERENCE_ROLES.slice(0, count);
   const aspectRatio = options.aspectRatio || '3:4';
 
-  const imageMap = [
-    'IMAGE 1 = the person (identity reference).',
-    ...roles.map((role, i) => `IMAGE ${i + 2} = ${role.label} (exact product reference).`),
-  ].join('\n');
-
-  const pieceInstructions = roles
-    .map((role, i) => `- From IMAGE ${i + 2}, reproduce ${role.detail}.`)
+  const referenceMap = roles.map((role) => `${role.caption} — ${role.detail}.`).join('\n');
+  const garments = roles.slice(1);
+  const garmentList = garments
+    .map((role) => `- ${role.caption.split('=')[1].trim()}`)
     .join('\n');
 
-  return `Create a highly photorealistic fashion photograph using the provided person image as the identity reference and the ${pieceCount} provided garment images as exact outfit references.
+  return `Create ONE highly photorealistic photograph of the person shown in the first reference image.
 
 REFERENCE MAP
-${imageMap}
-The ${pieceCount} garment images are components of ONE single graduation outfit. They are not separate or alternative garments. Assemble them into one coherent outfit worn at the same time by the same person.
+${referenceMap}
+
+The ${garments.length} garment references are components of ONE single graduation outfit. They are not separate outfits and not alternatives. Combine them into one coherent outfit and place that complete outfit naturally on the person from the first reference image.
 
 IDENTITY
-Preserve the person's identity and natural facial characteristics: face, facial structure and proportions, eyes, eyebrows, nose, mouth, jawline, skin tone, skin texture, freckles and marks, hair colour, hair texture and hairstyle, body type and build, age and natural appearance. The final image must be immediately recognisable as the exact person in IMAGE 1. Do not substitute an AI-generated face. Do not beautify, slim, smooth, re-age or otherwise idealise the person. Keep eyewear and existing personal features if they are visible in IMAGE 1.
+Preserve the person's recognisable facial characteristics, facial structure, eyes, nose, mouth, skin tone, hairstyle, hair colour, approximate age, build and overall appearance as accurately as the reference allows. The result must read as the same person. Do not substitute a different or AI-invented face. Do not beautify, slim, smooth or re-age the person.
 
-PRODUCT FIDELITY
-The garment images are the single source of truth for the outfit.
-${pieceInstructions}
-Reproduce the original colours exactly, including hue, saturation and value. Reproduce the original materials, textures, weave, sheen and opacity. Reproduce the original proportions, seams, construction, hems, edges, fastenings, trims, embroidery, patterns and any logo or insignia exactly as they appear. Do not redesign, restyle, simplify, embellish or reinterpret any component. Do not add, remove or move decorations. Do not invent buttons, zips, jewellery, watches, badges or additional accessories. Do not introduce any clothing that is not present in the garment references.
+OUTFIT
+The person must be wearing, at the same time:
+${garmentList}
+Reproduce each garment's original colours, materials, textures, proportions, construction, trims, embroidery, patterns and insignia as shown in its reference. Do not redesign, restyle or embellish them. Do not add clothing, jewellery or accessories that are not present in the references.
+
+TOLERANCE FOR IMPERFECT REFERENCES
+Reconstruct missing visual information naturally when the reference images are incomplete, cropped, blurry, low-resolution, oddly framed, badly lit or otherwise imperfect. Infer the hidden parts of a cropped garment. Ignore irrelevant backgrounds, hangers, mannequins, props and packaging around a product. Normalise differing image ratios. Never refuse or return an empty result because a reference is imperfect — always make the best possible visual interpretation from what is available and produce one final image.
 
 RENDERING
-Place the complete outfit naturally on the person so that it fits the body underneath it. Render realistic garment-body interaction: correct draping over the shoulders and arms, natural fabric folds and creases driven by the pose, contact shadows where the fabric rests on the body, correct layering order between components, and clean realistic edges where the garment meets skin, hair and background. Keep anatomy correct: natural body proportions, correctly formed hands with exactly five fingers, natural posture and natural neck and shoulder line. Keep one consistent lighting environment across face, skin, hair and every fabric, with matching light direction, colour temperature, softness and shadow density. Keep a single consistent camera perspective, focal length and depth of field. Keep the background simple, clean and uncluttered so the person and the outfit remain the subject.
+Render realistic anatomy and proportions, correctly formed hands, realistic fabric behaviour, natural folds and drape, contact shadows where fabric meets the body, correct layering between gown, hood/stole and cap, and clean edges where garments meet skin, hair and background. Match the garments to the person's body naturally. Use one consistent lighting environment, colour temperature and camera perspective across the face, skin and every fabric. Keep the background simple and uncluttered. Portrait orientation, approximately ${aspectRatio}.
 
 OUTPUT
-The final result must look like a professional photograph captured with a high-end camera and a fast prime lens: natural skin texture with visible pores and fine detail, realistic catchlights in the eyes, accurate white balance, natural micro-contrast, and subtle film-like tonality. Portrait orientation, approximately ${aspectRatio}, full frame on the person and the outfit.
+A single professional, realistic graduation photograph that looks captured with a high-end camera: natural skin texture, realistic catchlights, accurate white balance, natural micro-contrast.
 
-Do not create an illustration.
-Do not stylize the image.
-Do not render a painting, a render, a 3D model or a cartoon.
-Do not redesign the garments.
-Do not alter the person's identity.
-Do not introduce additional clothing or accessories.
-Do not add text, captions, watermarks or logos that are not part of the garment references.
-Do not produce plastic or waxy skin, over-smoothed features, deformed hands, extra fingers, extra limbs, floating clothing or garment geometry that ignores the body.
+The final image must contain exactly ONE person.
+Do not create a collage.
+Do not show the reference images themselves.
+Do not create multiple people.
+Do not create multiple versions of the person.
+Do not place garments floating around the person.
+Do not distort the face.
+Do not add text, captions or watermarks.
+Do not stylize, illustrate or cartoon the image.
+Do not refuse solely because the input references are imperfect.
 
-Photorealistic commercial fashion photography.`;
+Photorealistic commercial graduation photography.`;
 }

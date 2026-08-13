@@ -12,7 +12,7 @@ export async function generate({ person, pieces, prompt, config, signal }) {
 
   const input = {
     prompt,
-    [config.replicateImagesKey]: images,
+    [config.imagesKey]: images,
     output_format: 'png',
     aspect_ratio: config.aspectRatio,
   };

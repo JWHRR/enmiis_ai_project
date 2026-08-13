@@ -1,66 +1,218 @@
 import { GenerationError, briefly } from './util.js';
 
-const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
+/**
+ * Google Gemini native image generation (Nano Banana).
+ *
+ * Two API surfaces are supported, because Google moved image generation to the
+ * Interactions API while `:generateContent` remains available:
+ *
+ *   1. POST /v1beta/interactions            — current surface, tried first
+ *   2. POST /v1beta/models/{model}:generateContent — legacy surface, fallback
+ *
+ * The adapter also walks a ladder of models (Nano Banana 2 → Pro → Nano Banana)
+ * so a key that has not been granted the newest model still produces an image.
+ */
+
+/** Errors that mean "this model is not usable for this key" — try the next one. */
+function isModelUnavailable(status, body) {
+  if (status === 404) return true;
+  const text = typeof body === 'string' ? body : JSON.stringify(body || '');
+  return /not found|not supported|does not exist|unsupported model|NOT_FOUND|permission/i.test(text);
+}
+
+/** Errors that mean "this request shape was rejected" — retry without extras. */
+function isBadConfig(status, body) {
+  if (status !== 400) return false;
+  const text = typeof body === 'string' ? body : JSON.stringify(body || '');
+  return /unknown name|invalid json payload|cannot find field|unexpected|invalid argument/i.test(text);
+}
+
+function isSafetyBlock(body) {
+  const text = typeof body === 'string' ? body : JSON.stringify(body || '');
+  return /SAFETY|IMAGE_SAFETY|PROHIBITED_CONTENT|blocked/i.test(text);
+}
 
 /**
- * Google Gemini image models (multi-reference image editing).
- * Each reference image is preceded by a caption part so the model knows which
- * image carries the identity and which ones carry the product truth.
+ * Walks an unknown response shape looking for inline base64 image bytes.
+ * Written defensively so a field rename on Google's side does not break us.
  */
-export async function generate({ person, pieces, prompt, labels, config, signal }) {
-  const parts = [{ text: prompt }, { text: labels.person }];
+export function findInlineImage(value, depth = 0) {
+  if (depth > 8 || value == null || typeof value !== 'object') return null;
 
-  parts.push({ inline_data: { mime_type: person.mimeType, data: person.base64 } });
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findInlineImage(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
 
-  pieces.forEach((piece, index) => {
-    parts.push({ text: labels.pieces[index] });
-    parts.push({ inline_data: { mime_type: piece.mimeType, data: piece.base64 } });
-  });
+  const mime = value.mime_type || value.mimeType;
+  const data = typeof value.data === 'string' ? value.data : null;
 
-  const url = `${ENDPOINT}/${encodeURIComponent(config.model)}:generateContent`;
+  // A base64 image block: has data, and either an image mime type or no mime
+  // type at all inside a field that is clearly an image.
+  if (data && data.length > 128 && (!mime || String(mime).startsWith('image/'))) {
+    if (mime || value.type === 'image') {
+      return { base64: data, mimeType: mime || 'image/png' };
+    }
+  }
 
+  const inline = value.inlineData || value.inline_data;
+  if (inline) {
+    const found = findInlineImage(inline, depth + 1);
+    if (found) return found;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'inlineData' || key === 'inline_data') continue;
+    const found = findInlineImage(child, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function post(url, apiKey, payload, signal) {
   const response = await fetch(url, {
     method: 'POST',
     signal,
     headers: {
       'Content-Type': 'application/json',
-      'x-goog-api-key': config.apiKey,
+      'x-goog-api-key': apiKey,
     },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts }],
-      generationConfig: {
-        responseModalities: ['IMAGE'],
-        temperature: 0.25,
-      },
-    }),
+    body: JSON.stringify(payload),
   });
 
   const body = await response.json().catch(() => null);
+  return { status: response.status, ok: response.ok, body };
+}
 
-  if (!response.ok) {
-    throw new GenerationError(`Gemini responded ${response.status}: ${briefly(body)}`, {
-      status: response.status,
-      detail: body,
-    });
+/** Interactions API — the current surface for Nano Banana models. */
+function interactionsPayload({ model, prompt, images, labels, settings, withFormat }) {
+  const input = [{ type: 'text', text: prompt }];
+
+  images.forEach((image, index) => {
+    input.push({ type: 'text', text: labels[index] });
+    input.push({ type: 'image', mime_type: image.mimeType, data: image.base64 });
+  });
+
+  const payload = { model, input };
+
+  if (withFormat) {
+    payload.response_format = {
+      type: 'image',
+      aspect_ratio: settings.aspectRatio,
+      image_size: settings.imageSize,
+    };
+  }
+  return payload;
+}
+
+/** Legacy :generateContent surface. */
+function generateContentPayload({ prompt, images, labels, settings, withFormat }) {
+  const parts = [{ text: prompt }];
+
+  images.forEach((image, index) => {
+    parts.push({ text: labels[index] });
+    parts.push({ inline_data: { mime_type: image.mimeType, data: image.base64 } });
+  });
+
+  const payload = { contents: [{ role: 'user', parts }] };
+
+  if (withFormat) {
+    payload.generationConfig = {
+      responseModalities: ['IMAGE'],
+      imageConfig: { aspectRatio: settings.aspectRatio },
+    };
+  }
+  return payload;
+}
+
+async function attempt({ url, apiKey, payload, signal, surface, model }) {
+  const { status, ok, body } = await post(url, apiKey, payload, signal);
+
+  if (!ok) {
+    return {
+      ok: false,
+      status,
+      body,
+      retryWithoutFormat: isBadConfig(status, body),
+      nextModel: isModelUnavailable(status, body),
+      message: `${surface} ${model} → ${status}: ${briefly(body, 240)}`,
+    };
   }
 
-  const candidate = body?.candidates?.[0];
-  const image = candidate?.content?.parts?.find((part) => part.inlineData || part.inline_data);
-
+  const image = findInlineImage(body);
   if (!image) {
-    const blocked = body?.promptFeedback?.blockReason || candidate?.finishReason;
-    throw new GenerationError(`Gemini returned no image (${blocked || 'unknown reason'}).`, {
-      userMessage:
-        blocked === 'SAFETY' || blocked === 'IMAGE_SAFETY'
-          ? "La génération a été refusée par le service d'image. Essayez avec une autre photo."
-          : undefined,
-      detail: body,
-    });
+    return {
+      ok: false,
+      status,
+      body,
+      nextModel: false,
+      safety: isSafetyBlock(body),
+      message: `${surface} ${model} returned no image: ${briefly(body, 240)}`,
+    };
   }
 
-  const inline = image.inlineData || image.inline_data;
-  return {
-    base64: inline.data,
-    mimeType: inline.mimeType || inline.mime_type || 'image/png',
-  };
+  return { ok: true, image };
+}
+
+export async function generate({ person, pieces, prompt, labels, config: settings, signal }) {
+  const images = [person, ...pieces];
+  const captions = labels?.all || images.map((_, i) => `IMAGE ${i + 1}`);
+  const models = settings.models?.length ? settings.models : [settings.model];
+
+  const failures = [];
+  let sawSafetyBlock = false;
+
+  for (const model of models) {
+    const surfaces = [
+      {
+        name: 'interactions',
+        url: `${settings.apiBase}/interactions`,
+        build: (withFormat) =>
+          interactionsPayload({ model, prompt, images, labels: captions, settings, withFormat }),
+      },
+      {
+        name: 'generateContent',
+        url: `${settings.apiBase}/models/${encodeURIComponent(model)}:generateContent`,
+        build: (withFormat) =>
+          generateContentPayload({ prompt, images, labels: captions, settings, withFormat }),
+      },
+    ];
+
+    for (const surface of surfaces) {
+      for (const withFormat of [true, false]) {
+        const result = await attempt({
+          url: surface.url,
+          apiKey: settings.apiKey,
+          payload: surface.build(withFormat),
+          signal,
+          surface: surface.name,
+          model,
+        });
+
+        if (result.ok) {
+          return { ...result.image, meta: { model, surface: surface.name } };
+        }
+
+        failures.push(result.message);
+        if (result.safety) sawSafetyBlock = true;
+
+        // Only the "unknown field" case is worth retrying without the
+        // optional response-format block.
+        if (!result.retryWithoutFormat) break;
+      }
+    }
+    // Both surfaces are always tried before moving down the model ladder: a
+    // 404 can mean "this model is unknown" or "this API surface is not
+    // enabled for this project", and the two are not reliably separable.
+  }
+
+  throw new GenerationError(`Gemini failed:\n  ${failures.join('\n  ')}`, {
+    userMessage: sawSafetyBlock
+      ? "La génération a été refusée par le service d'image. Essayez avec une autre photo."
+      : undefined,
+    detail: failures,
+  });
 }

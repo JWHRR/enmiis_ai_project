@@ -1,73 +1,146 @@
 # Atelier — AI Virtual Outfit Studio
 
 A standalone web application with a single purpose: produce a highly realistic
-image of a specific person wearing a specific custom graduation robe.
+image of a specific person wearing a specific graduation outfit.
 
-The user uploads **one photo of a person** and **three images of the outfit's
-components**. The application combines them into **one photorealistic
-photograph** of that person wearing that exact outfit.
+The user uploads **four references** — a person, a gown, a hood/stole and a
+mortarboard — and the application returns **one photorealistic photograph** of
+that person wearing that complete outfit.
 
-> One real person + three exact outfit references → one highly realistic image
-> of that person wearing that exact outfit.
+```
+FACE + GOWN + HOOD + CAP  →  Gemini (Nano Banana 2)  →  ONE realistic person
+                                                        wearing the complete outfit
+```
 
 ---
 
 ## Quick start
 
 ```bash
-npm start
+npm start          # → http://localhost:3000
 ```
 
-Then open <http://localhost:3000>.
+Nothing to install — **zero runtime dependencies**, Node 18.17+ (developed on 24).
 
-There is nothing to install — the project has **zero runtime dependencies** and
-runs on Node 18.17+ (developed on Node 24).
-
-Without an API key the app runs in **demo mode**: the whole interface works and
-a clearly-labelled demonstration asset stands in for the generated image.
-
-## Enabling real generation
+Without a key the app runs in demo mode. To enable real generation:
 
 ```bash
 cp .env.example .env
 ```
 
-Then set:
+```ini
+GEMINI_API_KEY=your-key-here
+```
+
+That is the only value you need. Get a free key from
+[Google AI Studio](https://aistudio.google.com/apikey).
+
+Verify it works before touching the UI:
+
+```bash
+npm run check:gemini                                  # placeholder references
+npm run check:gemini -- face.jpg gown.jpg hood.jpg cap.jpg
+```
+
+It runs the exact code path the web app uses and writes `check-output.png`.
+
+---
+
+## The generation model
+
+**Gemini 3.1 Flash Image (Nano Banana 2)** is the primary provider. It is a
+native multi-reference image model, which is what this workflow actually needs:
+four reference images in one request, image-to-image editing, identity
+reference, strong instruction following, and consistency across references. A
+generic text-to-image model cannot do this.
+
+The four references are sent in **one request**, each preceded by a caption
+naming its role:
+
+```
+IMAGE 1 = PERSON REFERENCE (identity)
+IMAGE 2 = GOWN / ROBE REFERENCE
+IMAGE 3 = HOOD / STOLE REFERENCE
+IMAGE 4 = MORTARBOARD / CAP REFERENCE
+```
+
+### Model ladder
+
+If the configured model is not available to your key, the adapter walks down
+this list automatically instead of failing:
+
+| Model                         | Name              |
+| ----------------------------- | ----------------- |
+| `gemini-3.1-flash-image`      | Nano Banana 2 — **default** |
+| `gemini-3-pro-image`          | Nano Banana Pro   |
+| `gemini-2.5-flash-image`      | Nano Banana       |
+| `gemini-3.1-flash-lite-image` | Nano Banana 2 Lite |
+
+Override with `GEMINI_IMAGE_MODEL`.
+
+### Two API surfaces
+
+Google moved image generation to the **Interactions API** while
+`:generateContent` remains available. The adapter tries them in that order, per
+model, because a 404 can mean either "unknown model" or "this surface is not
+enabled for this project" and the two are not reliably separable:
+
+1. `POST /v1beta/interactions`
+2. `POST /v1beta/models/{model}:generateContent`
+
+Responses are parsed with a tolerant search for inline base64 image data, so a
+field rename on Google's side does not break generation.
+
+---
+
+## Provider chain and fallback
+
+```
+generateVirtualOutfit()
+   → gemini    fails? →
+   → fal       fails? →
+   → replicate fails? →  error
+```
+
+A failure of any kind — API error, timeout, quota, unavailable model, network
+fault, unusable response — moves to the next provider automatically. The user
+sees an error only once **every** provider has failed.
 
 ```ini
 AI_PROVIDER=gemini
-AI_API_KEY=your-key-here
+AI_PROVIDER_CHAIN=gemini,fal,replicate
 ```
 
-Restart the server. The "Mode démonstration" badge disappears once a provider
-is configured.
+Leave `AI_PROVIDER_CHAIN` empty and the chain becomes the primary provider
+followed by every other provider that has a key. Providers without credentials
+are skipped rather than attempted.
 
-### Supported providers
+| Provider    | Key env              | Default model             |
+| ----------- | -------------------- | ------------------------- |
+| `gemini`    | `GEMINI_API_KEY`     | `gemini-3.1-flash-image`  |
+| `fal`       | `FAL_KEY`            | `fal-ai/nano-banana/edit` |
+| `replicate` | `REPLICATE_API_TOKEN`| `google/nano-banana`      |
+| `openai`    | `OPENAI_API_KEY`     | `gpt-image-1`             |
+| `fashn`     | `FASHN_API_KEY`      | `tryon-v1.6`              |
 
-| `AI_PROVIDER` | Default model            | Notes                                                        |
-| ------------- | ------------------------ | ------------------------------------------------------------ |
-| `gemini`      | `gemini-2.5-flash-image` | Multi-image editing. Each reference is captioned with its role. |
-| `fal`         | `fal-ai/nano-banana/edit`| Any fal model taking `prompt` + `image_urls`.                 |
-| `replicate`   | `google/nano-banana`     | Set `AI_INPUT_IMAGES_KEY` if the model names its image array differently. |
-| `fashn`       | `tryon-v1.6`             | True VTON. See the caveat below.                              |
-| `openai`      | `gpt-image-1`            | Multipart image edits.                                        |
-| `demo`        | —                        | No network calls at all.                                      |
+**Demo mode is a last resort only.** It runs when no provider has a credential
+at all. It is never substituted after a real provider fails — a failure shows
+the error screen rather than a fake result, and the demo asset is always
+labelled as a demonstration.
 
-Override the model with `AI_MODEL`.
+**On FASHN:** it is a true try-on model but takes one garment and no text
+prompt, so the three components must be applied in sequential passes and the
+role captions are lost. It is available but is not a good fit for this
+four-reference workflow; the multi-reference providers are.
 
-**FASHN caveat:** FASHN dresses one model image with one garment image and
-accepts no text prompt. The three components are therefore applied
-*sequentially* — each pass's output becomes the next pass's model image. Identity
-preservation and product fidelity come from the model itself, not from the
-internal prompt. The multi-reference providers (`gemini`, `fal`, `replicate`,
-`openai`) receive all four images together and are the better fit for this brief.
+---
 
 ## How it works
 
 ```
-Browser  ──►  POST /api/generate  ──►  provider adapter  ──►  image model
-   ▲                                                              │
-   └──────────────  inline image (data URL)  ◄────────────────────┘
+Browser  ──►  POST /api/generate  ──►  provider chain  ──►  image model
+   ▲                                                            │
+   └────────────  inline image (data URL)  ◄───────────────────┘
 ```
 
 The browser never talks to an AI provider and never sees an API key. It only
@@ -75,54 +148,60 @@ calls this application's own backend.
 
 `generateVirtualOutfit()` in [`server/generate.js`](server/generate.js) is the
 single abstraction the rest of the app uses. Every adapter in
-[`server/providers/`](server/providers/) exposes the same signature, so changing
-provider is a configuration change rather than a code change.
+[`server/providers/`](server/providers/) has the same signature, so changing or
+reordering providers is configuration, not code.
 
 ### The internal prompt
 
-[`server/prompt.js`](server/prompt.js) builds the generation prompt dynamically
-from the references that were actually uploaded. It maps each image to a role
-(identity / robe / detailing / accessory), states that the three garment images
-are components of **one** outfit, and constrains the model on identity
-preservation, product fidelity, and photorealism.
+[`server/prompt.js`](server/prompt.js) builds the prompt from the references
+that were actually uploaded. It maps each image to its role, states that the
+three garment images are components of **one** outfit, and constrains identity
+preservation, product fidelity, single-person output and photorealism.
 
-This prompt is a backend-only asset. It is never returned by the API and never
-rendered in the browser. Set `DEBUG_PROMPT=1` to print it to the server console
-during development.
+It is a backend-only asset — never returned by the API, never rendered in the
+browser. `DEBUG_PROMPT=1` prints it to the server console during development.
+
+---
+
+## Input tolerance
+
+Imperfect references are expected and handled by the model, not blocked by the
+app. Blurry faces, low-resolution garments, cropped gowns, mixed aspect ratios,
+poor lighting and busy backgrounds all generate anyway — the prompt explicitly
+instructs the model to reconstruct missing information and never to refuse
+because a reference is imperfect.
+
+Uploads are refused **only** for technical and security reasons, checked in the
+browser and re-checked on the server:
+
+- **Format** — JPG, JPEG, PNG, WEBP only, confirmed by magic bytes so a renamed
+  file cannot slip through.
+- **Structure** — the bytes must really be a valid image of that type.
+- **Size** — 20 MB per image, 60 MB per request.
+
+There is no sharpness, resolution or face-detection gate.
+
+---
 
 ## Project layout
 
 ```
 server/
   index.js            HTTP server, static files, /api routes
-  config.js           .env loading, provider resolution, limits
-  validate.js         format / size / dimension / magic-byte checks
-  prompt.js           internal generation prompt
-  generate.js         generateVirtualOutfit() + provider registry
-  providers/          one adapter per provider, same signature
+  config.js           .env loading, provider chain, credentials, limits
+  validate.js         format / structure / size checks
+  prompt.js           internal four-role generation prompt
+  generate.js         generateVirtualOutfit() + chain with fallback
+  providers/
+    gemini.js         two API surfaces + model ladder
+    fal.js  replicate.js  fashn.js  openai.js  demo.js
+scripts/
+  check-gemini.mjs    live end-to-end check against the real API
 public/
-  index.html          landing, 4-step wizard, review, loading, result, error
-  styles.css          design system
-  app.js              upload handling, validation, generation, result
-  demo/               demonstration asset used in demo mode
+  index.html  styles.css  app.js  demo/
 ```
 
-## Image validation
-
-Checked in the browser *and* re-checked on the server (the browser's answer is
-never trusted):
-
-- **Format** — JPG, JPEG, PNG, WEBP only; the server confirms with magic bytes,
-  so a renamed file cannot slip through.
-- **Size** — 15 MB per image, 40 MB per request.
-- **Dimensions** — parsed from the file header; below 200 px the image is
-  rejected.
-- **Readability** — the file must decode.
-
-The browser additionally offers *advisory* hints it cannot prove: a
-Laplacian-variance sharpness estimate flags blurry uploads, and the platform
-face detector is consulted when the browser exposes one. These produce guidance,
-never a blocked upload.
+---
 
 ## Privacy
 
@@ -130,23 +209,28 @@ never a blocked upload.
   written to disk**, so there is no stored copy to expire or clean up.
 - The generated image is returned inline as a data URL, so the browser never
   contacts the provider's storage.
-- When a provider is configured, the images *are* sent to that third party for
+- When a provider is configured the images *are* sent to that third party for
   the duration of the render — the interface says so explicitly rather than
-  claiming deletion the backend cannot guarantee.
+  claiming a deletion the backend cannot guarantee.
 - In demo mode no image leaves the machine.
+
+---
 
 ## Configuration reference
 
-| Variable              | Default    | Purpose                                        |
-| --------------------- | ---------- | ---------------------------------------------- |
-| `AI_PROVIDER`         | `demo`     | Which adapter to use.                          |
-| `AI_API_KEY`          | —          | Provider credential. Backend only.             |
-| `AI_MODEL`            | per provider | Override the default model.                  |
-| `AI_INPUT_IMAGES_KEY` | `image_input` | Replicate: name of the image array field.   |
-| `AI_ASPECT_RATIO`     | `3:4`      | Output ratio hint.                             |
-| `AI_TIMEOUT_MS`       | `240000`   | Generation budget, enforced centrally.         |
-| `PORT`                | `3000`     | HTTP port.                                     |
-| `DEBUG_PROMPT`        | `0`        | Print the internal prompt. Development only.   |
+| Variable              | Default                  | Purpose                                |
+| --------------------- | ------------------------ | -------------------------------------- |
+| `GEMINI_API_KEY`      | —                        | Gemini credential. Backend only.       |
+| `GEMINI_IMAGE_MODEL`  | `gemini-3.1-flash-image` | Primary image model.                   |
+| `GEMINI_IMAGE_SIZE`   | `2K`                     | Requested output size: 1K / 2K / 4K.   |
+| `GEMINI_API_BASE`     | official endpoint        | Point at a proxy, gateway or mock.     |
+| `AI_PROVIDER`         | `gemini`                 | Provider tried first.                  |
+| `AI_PROVIDER_CHAIN`   | derived                  | Explicit ordered fallback chain.       |
+| `FAL_KEY` etc.        | —                        | Optional fallback provider keys.       |
+| `AI_ASPECT_RATIO`     | `3:4`                    | Output ratio hint.                     |
+| `AI_TIMEOUT_MS`       | `180000`                 | Per-provider budget, enforced centrally. |
+| `PORT`                | `3000`                   | HTTP port.                             |
+| `DEBUG_PROMPT`        | `0`                      | Print the internal prompt. Dev only.   |
 
-An unset key, or an unknown `AI_PROVIDER`, falls back to demo mode and prints a
-warning at startup rather than failing at generation time.
+Never commit `.env`; it is git-ignored. No key is ever sent to the browser —
+`/api/config` returns only the provider name, model, chain and limits.

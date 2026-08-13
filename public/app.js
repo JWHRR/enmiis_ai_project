@@ -5,24 +5,23 @@
    application's own backend at /api/generate.
    ========================================================================== */
 
-const FIELDS = ['person', 'piece1', 'piece2', 'piece3'];
+/* The four reference slots, in the order the model receives them:
+   person → gown → hood/stole → mortarboard/cap. */
+const FIELDS = ['person', 'gown', 'hood', 'cap'];
 
 const LIMITS = {
   accepted: ['image/jpeg', 'image/png', 'image/webp'],
-  maxBytes: 15 * 1024 * 1024,
-  minDimension: 200,
-  recommended: { person: 640, piece: 512 },
+  maxBytes: 20 * 1024 * 1024,
   maxEdge: 1536,
-  blurThreshold: 55,
 };
 
+/* Only technical problems are refused. An image is never rejected for being
+   blurry, small, cropped or badly lit — the model reconstructs from what it
+   is given, so blocking on quality would only stop a workable generation. */
 const COPY = {
-  tooSmall: 'Cette image est trop petite pour obtenir un résultat optimal.',
-  faceUnclear: 'Veuillez utiliser une photo où le visage est clairement visible.',
-  pieceUnclear: 'Veuillez utiliser une image plus nette de cette pièce.',
   badFormat: 'Format non pris en charge. Utilisez un fichier JPG, JPEG, PNG ou WEBP.',
-  tooLarge: 'Cette image est trop volumineuse (maximum 15 Mo).',
-  unreadable: "Cette image n'a pas pu être lue. Veuillez en choisir une autre.",
+  tooLarge: 'Cette image est trop volumineuse (maximum 20 Mo).',
+  unreadable: "Ce fichier n'a pas pu être lu. Veuillez en choisir un autre.",
   missing: 'Veuillez ajouter une image pour continuer.',
 };
 
@@ -38,15 +37,15 @@ const LOADING_MESSAGES = [
 
 const REVIEW_LABELS = {
   person: 'Personne',
-  piece1: 'Pièce 1',
-  piece2: 'Pièce 2',
-  piece3: 'Pièce 3',
+  gown: 'Robe',
+  hood: 'Étole',
+  cap: 'Toque',
 };
 
 const state = {
   view: 'landing',
   step: 1,
-  refs: { person: null, piece1: null, piece2: null, piece3: null },
+  refs: { person: null, gown: null, hood: null, cap: null },
   result: null,
   config: null,
   request: null,
@@ -144,70 +143,14 @@ function buildPayload({ source, width, height }) {
   return canvas.toDataURL('image/jpeg', 0.92);
 }
 
-/**
- * Variance of the Laplacian on a small greyscale copy — a cheap, well-known
- * sharpness estimate. It is a hint used to advise the user, never a verdict.
- */
-function measureSharpness({ source, width, height }) {
-  const size = 256;
-  const scale = Math.min(1, size / Math.max(width, height));
-  const w = Math.max(8, Math.round(width * scale));
-  const h = Math.max(8, Math.round(height * scale));
-
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(source, 0, 0, w, h);
-
-  let pixels;
-  try {
-    pixels = ctx.getImageData(0, 0, w, h).data;
-  } catch {
-    return null; // canvas tainted or unavailable — skip the hint
-  }
-
-  const grey = new Float32Array(w * h);
-  for (let i = 0; i < grey.length; i += 1) {
-    const p = i * 4;
-    grey[i] = 0.299 * pixels[p] + 0.587 * pixels[p + 1] + 0.114 * pixels[p + 2];
-  }
-
-  let sum = 0;
-  let sumSquares = 0;
-  let count = 0;
-
-  for (let y = 1; y < h - 1; y += 1) {
-    for (let x = 1; x < w - 1; x += 1) {
-      const i = y * w + x;
-      const value =
-        4 * grey[i] - grey[i - 1] - grey[i + 1] - grey[i - w] - grey[i + w];
-      sum += value;
-      sumSquares += value * value;
-      count += 1;
-    }
-  }
-
-  if (!count) return null;
-  const mean = sum / count;
-  return sumSquares / count - mean * mean;
-}
-
-/** Uses the browser's face detector when the platform exposes one. */
-async function detectFace(source) {
-  if (!('FaceDetector' in window)) return null; // unknown, not "absent"
-  try {
-    const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 4 });
-    const faces = await detector.detect(source);
-    return faces.length > 0;
-  } catch {
-    return null;
-  }
-}
-
 /* ---------------------------------------------------------- validation --- */
 
+/**
+ * Accepts an uploaded file. Refuses it only for technical reasons: an
+ * unsupported format, an oversized file, or bytes that do not decode as an
+ * image. Sharpness, resolution, framing and lighting are deliberately not
+ * checked — imperfect references are handled by the generation model.
+ */
 async function acceptFile(field, file) {
   const uploader = $(`.uploader[data-field="${field}"]`);
   const feedback = $(`[data-feedback="${field}"]`);
@@ -235,25 +178,6 @@ async function acceptFile(field, file) {
 
   if (!decoded.width || !decoded.height) return fail(COPY.unreadable);
 
-  if (decoded.width < LIMITS.minDimension || decoded.height < LIMITS.minDimension) {
-    return fail(COPY.tooSmall);
-  }
-
-  // Advisory hints — the file is accepted either way.
-  const notes = [];
-  const recommended = field === 'person' ? LIMITS.recommended.person : LIMITS.recommended.piece;
-  if (Math.max(decoded.width, decoded.height) < recommended) notes.push(COPY.tooSmall);
-
-  const sharpness = measureSharpness(decoded);
-  const blurry = sharpness !== null && sharpness < LIMITS.blurThreshold;
-
-  if (field === 'person') {
-    const hasFace = await detectFace(decoded.source);
-    if (hasFace === false || blurry) notes.push(COPY.faceUnclear);
-  } else if (blurry) {
-    notes.push(COPY.pieceUnclear);
-  }
-
   releaseRef(state.refs[field]);
 
   state.refs[field] = {
@@ -268,7 +192,7 @@ async function acceptFile(field, file) {
 
   uploader.classList.remove('is-invalid');
   feedback.classList.remove('is-error');
-  feedback.textContent = notes.length ? notes[0] : '';
+  feedback.textContent = '';
 
   renderUploader(field);
   return true;
