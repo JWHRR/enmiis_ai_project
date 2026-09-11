@@ -96,11 +96,22 @@ async function handleGenerate(req, res) {
   try {
     const result = await generateVirtualOutfit(references, { signal: controller.signal });
 
+    // A text-to-image model ignores the uploads and invents a face. That is a
+    // materially different product, so it is reported rather than passed off
+    // as a virtual try-on of the person who was uploaded.
+    const identityPreserved = result.meta ? result.meta.identityPreserved !== false : true;
+
     return sendJson(res, 200, {
       image: `data:${result.mimeType};base64,${result.base64}`,
       mimeType: result.mimeType,
       demo: result.demo,
       durationMs: result.durationMs,
+      meta: result.meta || null,
+      identityPreserved,
+      warning: identityPreserved
+        ? null
+        : "Ce rendu a été créé par un modèle qui ne peut pas utiliser vos photos : "
+          + "le visage et la tenue sont inventés et ne correspondent pas à vos références.",
     });
   } catch (error) {
     // Full detail stays on the server; the browser gets a usable French message.

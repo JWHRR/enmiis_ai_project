@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { MODEL_LADDER as HF_MODEL_LADDER } from './providers/huggingface.js';
+
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
@@ -40,6 +42,7 @@ const env = (name) => (process.env[name] || '').trim();
 
 /** Credential env vars accepted for each provider, in priority order. */
 const PROVIDER_KEYS = {
+  hf: ['HF_TOKEN', 'HUGGINGFACE_API_KEY', 'HUGGING_FACE_HUB_TOKEN'],
   gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_AI_STUDIO_API_KEY'],
   fal: ['FAL_KEY', 'FAL_API_KEY'],
   replicate: ['REPLICATE_API_TOKEN', 'REPLICATE_API_KEY'],
@@ -49,6 +52,7 @@ const PROVIDER_KEYS = {
 };
 
 const DEFAULT_MODELS = {
+  hf: 'Qwen/Qwen-Image-Edit-2509',
   gemini: 'gemini-3.1-flash-image',
   fal: 'fal-ai/nano-banana/edit',
   replicate: 'google/nano-banana',
@@ -92,6 +96,9 @@ function modelFor(name) {
   return DEFAULT_MODELS[name];
 }
 
+/** Verbose provider logging: on by default outside production. */
+const verbose = env('DEBUG') === '1' || env('NODE_ENV') !== 'production';
+
 const aspectRatio = env('AI_ASPECT_RATIO') || '3:4';
 const timeoutMs = Number(env('AI_TIMEOUT_MS')) || 180000;
 
@@ -108,6 +115,7 @@ const providers = Object.fromEntries(
       configured: name === 'demo' ? true : Boolean(apiKey),
       aspectRatio,
       timeoutMs,
+      verbose,
     };
 
     if (name === 'gemini') {
@@ -115,6 +123,23 @@ const providers = Object.fromEntries(
       settings.models = [model, ...GEMINI_MODEL_LADDER.filter((m) => m !== model)];
       settings.apiBase = env('GEMINI_API_BASE') || 'https://generativelanguage.googleapis.com/v1beta';
       settings.imageSize = env('GEMINI_IMAGE_SIZE') || '2K';
+    }
+    if (name === 'hf') {
+      // Edit models first: they are the only ones that can use the uploaded
+      // references. Text-to-image models are appended only when explicitly
+      // allowed, because they invent a face instead of preserving one.
+      const allowT2I = env('HF_ALLOW_TEXT_TO_IMAGE') === '1';
+      const pinned = env('HF_MODEL');
+
+      let ladder = HF_MODEL_LADDER.filter((m) => allowT2I || m.kind === 'edit');
+      if (pinned) {
+        const exact = HF_MODEL_LADDER.filter((m) => m.id === pinned);
+        if (exact.length) ladder = [...exact, ...ladder.filter((m) => m.id !== pinned)];
+      }
+
+      settings.ladder = ladder;
+      settings.model = ladder[0]?.id || DEFAULT_MODELS.hf;
+      settings.allowTextToImage = allowT2I;
     }
     if (name === 'replicate') {
       settings.imagesKey = env('AI_INPUT_IMAGES_KEY') || 'image_input';
@@ -171,6 +196,7 @@ export const config = {
 
   aspectRatio,
   timeoutMs,
+  verbose,
   debugPrompt: env('DEBUG_PROMPT') === '1',
 
   // Technical and security limits only. Image quality is never a reason to
@@ -182,14 +208,32 @@ export const config = {
   },
 };
 
-/** Public, key-free description of the runtime for the frontend. */
+/**
+ * Public, key-free description of the runtime for the frontend.
+ * It reports whether each credential is PRESENT — never the credential itself.
+ */
 export function describeConfig() {
+  const primary = config.providers[config.chain[0]];
+
   return {
+    mode: config.isDemo ? 'demo' : 'production',
+    demo: config.isDemo,
     provider: config.chain[0],
     chain: config.chain,
-    model: config.providers[config.chain[0]]?.model,
-    demo: config.isDemo,
+    model: primary?.model,
     misconfigured: config.misconfigured,
+
+    // Presence only. No token value ever crosses this boundary.
+    tokens: Object.fromEntries(
+      KNOWN_PROVIDERS.filter((n) => n !== 'demo').map((n) => [n, Boolean(config.providers[n].apiKey)])
+    ),
+    hasHfToken: Boolean(config.providers.hf.apiKey),
+
+    /** False when the active model invents a face instead of using the upload. */
+    identityCapable: config.chain[0] === 'hf'
+      ? config.providers.hf.ladder?.[0]?.kind === 'edit'
+      : config.chain[0] !== 'demo',
+
     limits: config.limits,
   };
 }

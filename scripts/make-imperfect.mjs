@@ -220,5 +220,5 @@ ws.close();
 chrome.kill();
 
 console.log(`\n  Run each set with:`);
-console.log(`    npm run check:gemini -- test-inputs/<case>/person.png test-inputs/<case>/gown.png \\`);
+console.log(`    npm run check -- test-inputs/<case>/person.png test-inputs/<case>/gown.png \\`);
 console.log(`                            test-inputs/<case>/hood.png test-inputs/<case>/cap.png\n`);

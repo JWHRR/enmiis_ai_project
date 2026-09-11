@@ -38,8 +38,8 @@ That is the only value you need. Get a free key from
 Verify it works before touching the UI:
 
 ```bash
-npm run check:gemini                                  # placeholder references
-npm run check:gemini -- face.jpg gown.jpg hood.jpg cap.jpg
+npm run check                                  # placeholder references
+npm run check -- face.jpg gown.jpg hood.jpg cap.jpg
 ```
 
 It runs the exact code path the web app uses and writes `check-output.png`.
@@ -90,6 +90,79 @@ enabled for this project" and the two are not reliably separable:
 
 Responses are parsed with a tolerant search for inline base64 image data, so a
 field rename on Google's side does not break generation.
+
+---
+
+## Provider: Hugging Face Inference Providers
+
+```ini
+HF_TOKEN=hf_xxx        # https://huggingface.co/settings/tokens
+AI_PROVIDER=hf
+```
+
+HF routes each model to the third-party GPU provider that serves it. The
+adapter walks a ladder, **preferring models that can actually use the uploads**:
+
+| Model | Route | Uses your photos | Identity |
+| --- | --- | --- | --- |
+| `Qwen/Qwen-Image-Edit-2509` | fal-ai | yes, 3 refs | preserved |
+| `black-forest-labs/FLUX.1-Kontext-dev` | fal-ai | yes, 1 ref | preserved |
+| `black-forest-labs/FLUX.1-Kontext-dev` | replicate | yes, 1 ref | preserved |
+| `black-forest-labs/FLUX.1-schnell` | nscale | **no** | **invented** |
+| `black-forest-labs/FLUX.1-dev` | fal-ai | **no** | **invented** |
+
+### Why the last two are opt-in
+
+FLUX.1-dev and FLUX.1-schnell are **text-to-image** models. They accept a
+prompt and nothing else, so the uploaded person, gown, hood and cap never reach
+them. They produce a convincing graduation photo **of a stranger**, which is
+not what this product promises.
+
+They are therefore disabled unless `HF_ALLOW_TEXT_TO_IMAGE=1`. When one is used
+the API returns `identityPreserved: false` plus a `warning`, and the result page
+tells the user the face is not theirs.
+
+### Cost
+
+Image-editing models are billed per call through HF. A free account includes a
+small monthly credit allowance; once spent, edit models return **402** and only
+the cheaper text-to-image route keeps working. Add credits or subscribe to PRO
+at <https://huggingface.co/settings/billing>.
+
+### Error handling
+
+| Status | Behaviour |
+| --- | --- |
+| 401 / 403 | token rejected — stops the ladder |
+| 402 | credits exhausted for that provider — **tries the next model** |
+| 429 | rate limited — tries the next model |
+| 400 / 422 | request rejected — tries the next model |
+| 503 | model cold-starting — tries the next model |
+
+---
+
+## Deploying to Vercel
+
+```bash
+npm i -g vercel
+vercel link
+vercel env add HF_TOKEN production
+vercel env add AI_PROVIDER production      # value: hf
+vercel --prod
+```
+
+`vercel.json` serves `public/` statically and exposes `api/config.js` and
+`api/generate.js` as functions. Both reuse the same `server/` modules as the
+standalone server, so local and deployed behaviour match.
+
+**Platform limits that matter here**
+
+- **Function duration** — 60s on Hobby, 300s on Pro. One generation takes
+  10-40s, but walking a failing ladder can exceed 60s. Keep `AI_TIMEOUT_MS`
+  below the ceiling and pin `HF_MODEL` in production to avoid long fallbacks.
+- **Request body** — 4.5 MB. The browser shrinks the four references to stay
+  under ~3.6 MB before sending.
+
 
 ---
 
@@ -196,7 +269,7 @@ server/
     gemini.js         two API surfaces + model ladder
     fal.js  replicate.js  fashn.js  openai.js  demo.js
 scripts/
-  check-gemini.mjs    live end-to-end check against the real API
+  check-provider.mjs  live end-to-end check against the real API
 public/
   index.html  styles.css  app.js  demo/
 ```

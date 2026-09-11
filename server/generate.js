@@ -3,6 +3,7 @@ import { buildGenerationPrompt, referenceLabels } from './prompt.js';
 import { GenerationError } from './providers/util.js';
 
 import * as demo from './providers/demo.js';
+import * as hf from './providers/huggingface.js';
 import * as gemini from './providers/gemini.js';
 import * as fal from './providers/fal.js';
 import * as replicate from './providers/replicate.js';
@@ -13,7 +14,7 @@ import * as openai from './providers/openai.js';
  * Provider registry. Every adapter exposes the same `generate()` signature, so
  * swapping or reordering providers is a configuration change, not a code change.
  */
-const PROVIDERS = { demo, gemini, fal, replicate, fashn, openai };
+const PROVIDERS = { demo, hf, gemini, fal, replicate, fashn, openai };
 
 /**
  * The single abstraction the rest of the application talks to.
@@ -94,6 +95,7 @@ export async function generateVirtualOutfit(references, options = {}) {
         demo: Boolean(result.demo) || name === 'demo',
         provider: name,
         model: result.meta?.model || settings.model,
+        meta: result.meta || null,
         attempts,
         durationMs: Date.now() - startedAt,
       };

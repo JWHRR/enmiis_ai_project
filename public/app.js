@@ -125,8 +125,8 @@ async function decodeImage(file) {
  * (so cut-out products keep clean edges), good quality JPEG. The user's
  * original file is never modified.
  */
-function buildPayload({ source, width, height }) {
-  const scale = Math.min(1, LIMITS.maxEdge / Math.max(width, height));
+function buildPayload({ source, width, height }, maxEdge = LIMITS.maxEdge) {
+  const scale = Math.min(1, maxEdge / Math.max(width, height));
   const w = Math.max(1, Math.round(width * scale));
   const h = Math.max(1, Math.round(height * scale));
 
@@ -141,6 +141,46 @@ function buildPayload({ source, width, height }) {
   ctx.drawImage(source, 0, 0, w, h);
 
   return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+/** Total size of a candidate payload, in bytes on the wire. */
+function payloadBytes(payload) {
+  return FIELDS.reduce((total, field) => total + (payload[field]?.length || 0), 0);
+}
+
+/**
+ * Builds the request body, re-encoding the references at a smaller size if the
+ * combined payload would exceed what a serverless function will accept.
+ */
+async function fitPayload() {
+  const budget = 3.6 * 1024 * 1024; // headroom under Vercel's 4.5 MB limit
+  let payload = Object.fromEntries(FIELDS.map((f) => [f, state.refs[f].payload]));
+
+  for (const edge of [1280, 1024, 832]) {
+    if (payloadBytes(payload) <= budget) break;
+
+    payload = Object.fromEntries(
+      await Promise.all(
+        FIELDS.map(async (field) => {
+          const decoded = await decodeImage(await dataUrlToBlob(state.refs[field].payload));
+          const shrunk = buildPayload(decoded, edge);
+          if (decoded.source.close) decoded.source.close();
+          return [field, shrunk];
+        })
+      )
+    );
+  }
+
+  return payload;
+}
+
+function dataUrlToBlob(dataUrl) {
+  const [header, data] = dataUrl.split(',');
+  const mime = header.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+  const bytes = atob(data);
+  const buffer = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i += 1) buffer[i] = bytes.charCodeAt(i);
+  return new Blob([buffer], { type: mime });
 }
 
 /* ---------------------------------------------------------- validation --- */
@@ -304,9 +344,9 @@ async function generate() {
   const controller = new AbortController();
   state.request = controller;
 
-  const payload = Object.fromEntries(
-    FIELDS.map((field) => [field, state.refs[field].payload])
-  );
+  // Serverless platforms cap the request body (Vercel: 4.5 MB). Shrink the
+  // references rather than letting the upload fail outright.
+  const payload = await fitPayload();
 
   try {
     const response = await fetch('/api/generate', {
@@ -322,7 +362,12 @@ async function generate() {
       throw new Error(body?.error || '');
     }
 
-    state.result = { image: body.image, mimeType: body.mimeType, demo: Boolean(body.demo) };
+    state.result = {
+      image: body.image,
+      mimeType: body.mimeType,
+      demo: Boolean(body.demo),
+      warning: body.warning || null,
+    };
 
     stopLoadingMessages();
     $('#loadingStatus').textContent = 'Votre tenue est prête.';
@@ -358,7 +403,7 @@ function showResult() {
 
   $('#resultNote').textContent = demo
     ? "Mode démonstration : ceci est un exemple prédéfini. Cette image n'a pas été générée à partir de vos photos."
-    : '';
+    : state.result.warning || '';
 
   $('#demoBadge').hidden = !demo && !state.config?.demo;
 
